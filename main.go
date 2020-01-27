@@ -6,8 +6,11 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
+	"text/template"
 
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
@@ -26,18 +29,14 @@ type Footprint struct {
 	Geomsource       string
 }
 
-const (
-	username = "mzyygnzbzeszgb"
-	// username = "postgres"
-	password = "46be8a7d16940eed1b4da8bf1f6ac7ec9616e0b073668918c5274c2576119a93"
-	host     = "ec2-52-203-98-126.compute-1.amazonaws.com"
-	// host = "footprints.celg0gvjzujb.us-east-1.rds.amazonaws.com"
-	port   = "5432"
-	dbName = "dcqcboq15tcb1e"
-	// dbName = "footprints"
-)
+var username = "mzyygnzbzeszgb"
+var passwordFile, err = ioutil.ReadFile("password")
+var password = string(passwordFile)
+var host = "ec2-52-203-98-126.compute-1.amazonaws.com"
+var port = "5432"
+var dbName = "dcqcboq15tcb1e"
 
-func sqlFunctions() {
+func connectToDB() *sql.DB {
 	connStr := "postgres://" + username + ":" + password + "@" + host + ":" + port + "/" + dbName
 
 	db, err := sql.Open("postgres", connStr)
@@ -45,6 +44,12 @@ func sqlFunctions() {
 		panic(err)
 	}
 
+	defer db.Close()
+
+	return db
+}
+
+func createTable(db *sql.DB) {
 	createSQLStatement := `CREATE TABLE IF NOT EXISTS footprints (
 		ConstructionYear integer,
 		Bin integer,
@@ -57,12 +62,16 @@ func sqlFunctions() {
 		Geomsource text
 	)`
 
-	_, err = db.Exec(createSQLStatement)
+	_, err := db.Exec(createSQLStatement)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	footprintsCSVFile, err := os.Open("building.csv")
+	defer db.Close()
+}
+
+func insertData(db *sql.DB, filename string) {
+	footprintsCSVFile, err := os.Open(filename)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -85,26 +94,53 @@ func sqlFunctions() {
 			fmt.Println(err)
 		}
 	}
-
-	defer db.Close()
-}
-
-func selectData(db *sql.DB) *sql.Rows {
-	selectSQLStatement := `SELECT * FROM footprints LIMIT 50`
-	rows, err := db.Query(selectSQLStatement)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	return rows
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "index.html")
 }
 
+func constructionYears(db *sql.DB) []string {
+	selectSQLStatement := `SELECT constructionyear FROM footprints LIMIT 50`
+	rows, err := db.Query(selectSQLStatement)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer rows.Close()
+	years := make([]string, 0)
+
+	for rows.Next() {
+		var year string
+		if err := rows.Scan(&year); err != nil {
+			log.Fatal(err)
+		}
+		years = append(years, year)
+	}
+
+	rerr := rows.Close()
+	if rerr != nil {
+		log.Fatal(err)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	return years
+}
+
+func constructionHTML(w http.ResponseWriter, r *http.Request, years []string) {
+	var template *template.Template
+	t, _ := template.ParseFiles("constructionyear.gohtml")
+	fmt.Fprint(w, t)
+}
+
 func main() {
+	db := connectToDB()
+	years := constructionYears(db)
+
 	r := mux.NewRouter()
 	r.HandleFunc("/", index)
+	r.HandleFunc("/constructionyears", constructionHTML(years))
 	http.ListenAndServe(":8000", r)
 }
