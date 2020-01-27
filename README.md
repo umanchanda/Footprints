@@ -20,8 +20,9 @@
 ### To-Do
 
 1. Add more routes via Mux
-2. Configure landing page to display a few records
-3. Decide what data should be displayed
-4. Use React to enhance the Front End
-5. Reorganize code into packages instead of everything inside `main.go`
-6. Dockerize the whole app
+2. Configure ConstructionYears route to display table. Need to figure out how to pass in `years` as a parameter
+3. Configure landing page to display a few records
+4. Decide what data should be displayed
+5. Use React to enhance the Front End
+6. Reorganize code into packages instead of everything inside `main.go`
+7. Dockerize the whole app
